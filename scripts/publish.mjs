@@ -10,6 +10,10 @@
  *                                               # 验证码只有 30 秒有效期，所以带 --otp 时
  *                                               # 会跳过门禁与 dry-run（见下方 fastPath 说明）。
  *
+ * 关于 TTY：npm 的 2FA 握手要求子进程自己是 TTY（安全密钥 / Touch ID 的 WebAuthn
+ * 流程尤其如此），所以真正发布那一步会继承终端 stdio。在无 TTY 的环境
+ * （CI、agent 代跑、管道）里只能走 --otp 或 bypass-2FA token。
+ *
  * <包名> 可以是包目录名（dsh-hello）或相对/绝对路径。
  */
 import { spawnSync } from 'node:child_process'
@@ -55,6 +59,22 @@ function run(command, commandArgs, options = {}) {
     stdout: clean(result.stdout),
     stderr: clean(result.stderr),
   }
+}
+
+/**
+ * 继承终端的 stdio 运行。npm 的 2FA 握手要求子进程自己就是 TTY：
+ *   npm/lib/utils/auth.js  otplease(): if (!process.stdin.isTTY || !process.stdout.isTTY) throw err
+ * 而 spawnSync 的 stdio 默认是 'pipe'，子进程拿不到 TTY，
+ * 于是安全密钥（WebAuthn / Touch ID）流程会被直接拒掉。
+ * 代价是拿不到输出文本，但交互式流程本来就应该让用户实时看到 npm 的输出。
+ */
+function runInherit(command, commandArgs, options = {}) {
+  const result = spawnSync(command, commandArgs, {
+    cwd: options.cwd ?? REPO_ROOT,
+    env: process.env,
+    stdio: 'inherit',
+  })
+  return { ok: result.status === 0, status: result.status }
 }
 
 function fail(message) {
@@ -162,25 +182,39 @@ if (!doPublish) {
 }
 
 // ---- 6. 真正发布 ----
+// 只有父进程真的有 TTY、且没用 --otp 时，才交给 npm 接管终端。
+// 这样安全密钥（Touch ID）的 WebAuthn 握手才有机会发生。
+const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY) && !fastPath
+const publishArgs = ['publish', ...(scoped ? ['--access', 'public'] : []), ...forwardedFlags]
+
 console.log('\n[publish] 发布中 ...')
-const publish = run('npm', ['publish', ...(scoped ? ['--access', 'public'] : []), ...forwardedFlags], {
-  cwd: packageDir,
-})
-if (!publish.ok) {
-  const needs2fa = /two-factor|403 Forbidden/.test(publish.stdout + publish.stderr)
-  fail(
-    `发布失败：\n${publish.stdout}\n${publish.stderr}\n`
-    + (needs2fa
-      ? '        npm 已对**所有包**强制要求 2FA（或带 bypass 2FA 的 granular access token），\n'
-        + '        这是 registry 侧策略，不是本地配置问题。两条路：\n'
-        + '        A. 账号启用 2FA（推荐）： https://www.npmjs.com/settings/<用户名>/profile\n'
-        + '           启用后 npm publish 会交互式要求六位码，或加 --otp=<六位码>。\n'
-        + '        B. 建带 bypass 2FA 的 granular access token（适合脚本/CI）：\n'
-        + '           https://www.npmjs.com/settings/<用户名>/tokens\n'
-        + '           写进用户级 ~/.npmrc： //registry.npmjs.org/:_authToken=<token>\n'
-        + '           注意：bypass 2FA 是在建 token 时设定的，事后不能改。'
-      : '        请按上面的 registry 返回信息排查。'),
-  )
+if (interactive) {
+  console.log('[publish] 检测到 TTY，让 npm 接管终端（2FA 的安全密钥流程需要 TTY）')
+  console.log('          若 npm 打印一个 URL，在浏览器里打开并用 Touch ID 认证即可。')
+  if (!runInherit('npm', publishArgs, { cwd: packageDir }).ok) {
+    fail('发布失败，npm 的错误输出已直接打印在上方。')
+  }
+} else {
+  const publish = run('npm', publishArgs, { cwd: packageDir })
+  if (!publish.ok) {
+    const output = publish.stdout + publish.stderr
+    const needs2fa = /two-factor|403 Forbidden/.test(output)
+    fail(
+      `发布失败：\n${publish.stdout}\n${publish.stderr}\n`
+      + (needs2fa
+        ? '        npm 已对**所有包**强制要求 2FA（或带 bypass 2FA 的 granular access token），\n'
+          + '        这是 registry 侧策略，不是本地配置问题。三条路：\n'
+          + '        A. 启用验证器 App（TOTP）： https://www.npmjs.com/settings/<用户名>/profile\n'
+          + '           然后把六位码传进来： --publish --otp=<六位码>\n'
+          + '        B. 启用安全密钥（Touch ID）：必须在你自己的终端里交互式发布，\n'
+          + '           直接跑 npm publish；无 TTY 的环境（含 agent 代跑）会被 npm 直接拒掉。\n'
+          + '        C. 建带 bypass 2FA 的 granular access token（适合脚本/CI）：\n'
+          + '           https://www.npmjs.com/settings/<用户名>/tokens\n'
+          + '           写进用户级 ~/.npmrc： //registry.npmjs.org/:_authToken=<token>\n'
+          + '           注意：bypass 2FA 只在建 token 时设定，事后不能改。'
+        : '        请按上面的 registry 返回信息排查。'),
+    )
+  }
 }
 
 // ---- 7. 验证 ----

@@ -1,0 +1,21 @@
+/*
+ * 示例样式：用官方设计 token（明文来自 shell 的 CSS 资产实测），
+ * 这样明暗主题下都跟着 DSH 自己的配色走，不需要为两套主题各写一份。
+ * 类名会被构建期编译成哈希名并自动注入 <style data-plugin="dsh-hello">。
+ */
+.badge {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 40;
+  padding: 2px 10px;
+  border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 12%));
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-2, rgb(255 255 255 / 88%));
+  color: var(--dsw-alias-label-secondary, inherit);
+  font-size: 12px;
+  line-height: 20px;
+  /* 纯展示，不抢输入框的点击。 */
+  pointer-events: none;
+  user-select: none;
+}

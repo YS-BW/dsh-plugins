@@ -1,0 +1,26 @@
+{
+  "name": "dsh-plugins",
+  "private": true,
+  "version": "0.0.0",
+  "description": "个人 DSH Web GUI 插件仓库：packages/* 下每个包都是独立的官方 cordis bundle 插件，可单独复制出去构建、单独发布到 npm。",
+  "type": "module",
+  "packageManager": "pnpm@11.1.2",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "preset:sync": "node scripts/sync-preset.mjs",
+    "preset:check": "node scripts/sync-preset.mjs --check",
+    "new": "node scripts/new-plugin.mjs",
+    "publish:check": "node scripts/publish.mjs",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm preset:check && pnpm -r test",
+    "gate": "pnpm preset:check && pnpm build && pnpm typecheck && pnpm -r test"
+  },
+  "dshPlugins": {
+    "scope": "@lixklv",
+    "template": "dsh-hello"
+  },
+  "license": "MIT"
+}

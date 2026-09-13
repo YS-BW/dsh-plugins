@@ -2,6 +2,16 @@
   "name": "@lixklv/dsh-hello",
   "version": "0.0.1",
   "description": "Minimal DSH Web GUI plugin skeleton: a floating badge that proves the host/client bundle pipeline end to end.",
+  "author": "lixklv",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YS-BW/dsh-plugins.git",
+    "directory": "packages/dsh-hello"
+  },
+  "homepage": "https://github.com/YS-BW/dsh-plugins/tree/main/packages/dsh-hello#readme",
+  "bugs": {
+    "url": "https://github.com/YS-BW/dsh-plugins/issues"
+  },
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",

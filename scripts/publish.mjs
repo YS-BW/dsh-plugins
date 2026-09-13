@@ -5,6 +5,10 @@
  *
  *   node scripts/publish.mjs <包名>              # 只预检 + dry-run，不会发布
  *   node scripts/publish.mjs <包名> --publish    # 全部预检通过后真正发布
+ *   node scripts/publish.mjs <包名> --publish --otp=123456
+ *                                               # 带 2FA 一次性验证码发布。
+ *                                               # 验证码只有 30 秒有效期，所以带 --otp 时
+ *                                               # 会跳过门禁与 dry-run（见下方 fastPath 说明）。
  *
  * <包名> 可以是包目录名（dsh-hello）或相对/绝对路径。
  */
@@ -17,6 +21,18 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const args = process.argv.slice(2)
 const target = args.find((value) => !value.startsWith('--'))
 const doPublish = args.includes('--publish')
+
+/**
+ * 转交给 npm publish 的额外参数（目前只用到 --otp）。
+ * 带 --otp 时走快路径：2FA 验证码 30 秒就过期，跑不动门禁 + dry-run 那 40 秒。
+ * 前提是刚刚已经用不带 --otp 的方式跑过一次完整预检。
+ */
+const forwardedFlags = args.filter((value) => value.startsWith('--otp'))
+const fastPath = forwardedFlags.length > 0
+
+if (args.includes('--otp')) {
+  fail('请用 --otp=<六位码> 形式传验证码，不要用空格分隔（否则验证码会被当成包名）。')
+}
 
 /** npm/pnpm 的代理告警是环境噪音，不是错误。 */
 const NOISE = /UNDICI-EHPA|trace-warnings|EnvHttpProxyAgent/
@@ -109,9 +125,11 @@ console.log(
 
 // ---- 4. 门禁 ----
 const isWorkspaceRoot = existsSync(join(REPO_ROOT, 'pnpm-workspace.yaml'))
-const gateCommand = isWorkspaceRoot ? 'pnpm' : null
 console.log('\n[publish] 跑门禁 ...')
-if (isWorkspaceRoot) {
+if (fastPath) {
+  console.warn('[publish] 检测到 --otp：跳过门禁与 dry-run（验证码 30 秒过期，来不及跑）')
+  console.warn('          前提是你刚跑过一次不带 --otp 的完整预检')
+} else if (isWorkspaceRoot) {
   const gate = run('pnpm', ['gate'])
   if (!gate.ok) fail(`门禁未通过：\n${gate.stdout}\n${gate.stderr}`)
   console.log('[publish] 门禁通过（preset:check + build + typecheck + test）')
@@ -124,14 +142,16 @@ if (isWorkspaceRoot) {
 }
 
 // ---- 5. 干跑，看清 tarball ----
-console.log('\n[publish] dry-run：即将发布的 tarball 内容')
-const dryRun = run('npm', ['publish', '--dry-run', ...(scoped ? ['--access', 'public'] : [])], {
-  cwd: packageDir,
-})
-if (!dryRun.ok) fail(`dry-run 失败：\n${dryRun.stdout}\n${dryRun.stderr}`)
-for (const line of (dryRun.stdout + '\n' + dryRun.stderr).split('\n')) {
-  if (/notice (Tarball Contents|Tarball Details|name:|version:|package size|unpacked size|total files)|notice \d|notice [\d.]+[km]?B /.test(line)) {
-    console.log(`  ${line.replace(/^npm notice\s?/, '')}`)
+if (!fastPath) {
+  console.log('\n[publish] dry-run：即将发布的 tarball 内容')
+  const dryRun = run('npm', ['publish', '--dry-run', ...(scoped ? ['--access', 'public'] : [])], {
+    cwd: packageDir,
+  })
+  if (!dryRun.ok) fail(`dry-run 失败：\n${dryRun.stdout}\n${dryRun.stderr}`)
+  for (const line of (dryRun.stdout + '\n' + dryRun.stderr).split('\n')) {
+    if (/notice (Tarball Contents|Tarball Details|name:|version:|package size|unpacked size|total files)|notice \d|notice [\d.]+[km]?B /.test(line)) {
+      console.log(`  ${line.replace(/^npm notice\s?/, '')}`)
+    }
   }
 }
 
@@ -143,13 +163,23 @@ if (!doPublish) {
 
 // ---- 6. 真正发布 ----
 console.log('\n[publish] 发布中 ...')
-const publish = run('npm', ['publish', ...(scoped ? ['--access', 'public'] : [])], {
+const publish = run('npm', ['publish', ...(scoped ? ['--access', 'public'] : []), ...forwardedFlags], {
   cwd: packageDir,
 })
 if (!publish.ok) {
+  const needs2fa = /two-factor|403 Forbidden/.test(publish.stdout + publish.stderr)
   fail(
     `发布失败：\n${publish.stdout}\n${publish.stderr}\n`
-    + '        若启用了两步验证，需要加 --otp=<六位码>（本脚本不代传，请手动执行）。',
+    + (needs2fa
+      ? '        npm 已对**所有包**强制要求 2FA（或带 bypass 2FA 的 granular access token），\n'
+        + '        这是 registry 侧策略，不是本地配置问题。两条路：\n'
+        + '        A. 账号启用 2FA（推荐）： https://www.npmjs.com/settings/<用户名>/profile\n'
+        + '           启用后 npm publish 会交互式要求六位码，或加 --otp=<六位码>。\n'
+        + '        B. 建带 bypass 2FA 的 granular access token（适合脚本/CI）：\n'
+        + '           https://www.npmjs.com/settings/<用户名>/tokens\n'
+        + '           写进用户级 ~/.npmrc： //registry.npmjs.org/:_authToken=<token>\n'
+        + '           注意：bypass 2FA 是在建 token 时设定的，事后不能改。'
+      : '        请按上面的 registry 返回信息排查。'),
   )
 }
 

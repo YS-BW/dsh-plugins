@@ -1,0 +1,146 @@
+/*
+ * 用官方设计 token（与设置页自身同一套 alias），明暗主题自动跟随，
+ * 不需要为两套主题各写一份。类名由构建期编译成哈希名并自动注入
+ * <style data-plugin="@lixklv/dsh-model-vision">。
+ */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l4, rgb(0 0 0 / 10%));
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-module-platform, transparent);
+  color: var(--dsw-alias-label-primary, inherit);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.title {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary, inherit);
+}
+
+.subtitle {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary, inherit);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.model {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--ds-font-family-code, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary, inherit);
+}
+
+.badges {
+  flex: none;
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 0.5px solid var(--dsw-alias-border-l3, rgb(0 0 0 / 12%));
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary, inherit);
+  white-space: nowrap;
+}
+
+.segments {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  border: 0.5px solid var(--dsw-alias-border-l3, rgb(0 0 0 / 12%));
+  border-radius: 999px;
+}
+
+.segment,
+.segmentActive {
+  box-sizing: border-box;
+  height: 24px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary, inherit);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.segment:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover, rgb(0 0 0 / 6%));
+  color: var(--dsw-alias-label-primary, inherit);
+}
+
+.segmentActive {
+  background: var(--dsw-alias-button-primary-fill, var(--dsw-alias-brand-primary, #4d6bfe));
+  color: var(--dsw-alias-label-primary-foreground, #fff);
+}
+
+.segment:disabled,
+.segmentActive:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.segment:focus-visible,
+.segmentActive:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3, rgb(0 0 0 / 20%));
+}
+
+.note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary, inherit);
+}
+
+.saved {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-success-primary, inherit);
+}
+
+.error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-error-primary, inherit);
+}

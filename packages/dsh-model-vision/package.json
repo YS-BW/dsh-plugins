@@ -1,0 +1,74 @@
+{
+  "name": "@lixklv/dsh-model-vision",
+  "version": "0.0.1",
+  "description": "Declare per-model image (vision) input inside the official DSH Web Models settings page: a three-state switch (inherit / text / text+image) for llm-pi-ai and llm-deepseek routes, written through the official settings service.",
+  "author": "lixklv",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YS-BW/dsh-plugins.git",
+    "directory": "packages/dsh-model-vision"
+  },
+  "homepage": "https://github.com/YS-BW/dsh-plugins/tree/main/packages/dsh-model-vision#readme",
+  "bugs": {
+    "url": "https://github.com/YS-BW/dsh-plugins/issues"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "engines": {
+      "dsh": ">=0.1.5-rc.1"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "scripts": {
+    "build": "tsdown && tsc -p tsconfig.build.json",
+    "watch": "tsdown --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepack": "npm run build"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "dsh-web",
+    "deepseek-harness",
+    "vision"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@types/react": "~18.3.31",
+    "jsdom": "29.1.1",
+    "lightningcss": "^1.32.0",
+    "react": "^18.3.1",
+    "tsdown": "^0.22.2",
+    "typescript": "~5.7.2",
+    "vitest": "^4.1.8"
+  },
+  "license": "MIT"
+}

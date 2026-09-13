@@ -11,6 +11,59 @@
 - `packages/<name>/`：一个独立发布的插件包。包名即插件 id。
 - `docs/publishing.md`：发布 npm 与登记进 dsh-web 社区索引的清单。
 
+## 交付定义（Definition of Done）
+
+**任何插件改动，交付前必须让下面这条命令全绿，并把输出贴进交付报告：**
+
+```sh
+pnpm gate
+```
+
+它按顺序跑 8 道关（全绿约 5 秒）：
+
+| 阶段 | 脚本 | 抓什么 |
+| --- | --- | --- |
+| `preset:check` | `sync-preset.mjs --check` | 包内预设副本与 `shared/` 漂移 |
+| `contract` | `check-plugin.mjs` | 发布契约（静态） |
+| `contract:selftest` | `test-checks.mjs` | 确认门禁本身没失效（19 个失败模式用例） |
+| `build` | tsdown + tsc | 构建，含客户端 bundle 纯度门 |
+| `contract:dist` | `check-plugin.mjs --dist` | 构建产物 + **真实 tarball 内容** |
+| `verify:mount` | `verify-mount.mjs` | 装进临时 profile，让 DSH loader 真的解析一遍 |
+| `typecheck` | `tsc --noEmit` | 类型 |
+| `-r test` | vitest | 单测 |
+
+### 必须避免的两类失败
+
+**A. 发布不了** —— 门禁会挡住这些成因：
+包名非法 / scope 与根配置不符 / version 非 semver / `private: true` /
+缺 `dsh.engines.dsh` / `files` 漏了 `lib` 或 patch 文件 / 缺 README 或 author・repository・keywords。
+
+**B. 发布了用不了** —— 这类最危险，因为**装得上、不报错、就是没反应**。门禁会挡住：
+
+- `clientBundle(id)` 与 `package.json` 的 `name` 不一致 → 客户端模块表注册不上，浏览器半区静默不执行
+- `cordis.patch.yml` 的 `name` 与包名不一致 → loader 解析不到，插件行挂不起来
+- `files` 漏 `cordis.patch.yml` 或 `lib/client.js` → 用户装上缺文件
+- `exports` 指向 tarball 里不存在的文件
+- 构建产物里注册的 id 不对、泄漏本机绝对路径、引入平台模块表之外的 `@deepseek-ai/*`
+
+**下面四处必须一致，改一处就要四处一起改**（`pnpm new` 会自动做对）：
+
+| 位置 | 值 |
+| --- | --- |
+| `package.json` → `name` | 完整包名 `@lixklv/dsh-xxx` |
+| `cordis.patch.yml` → `name` | 完整包名（逐字符一致） |
+| `tsdown.config.ts` → `clientBundle(id)` | 完整包名（逐字符一致） |
+| `cordis.patch.yml` → `id` | 短名 `dsh-xxx`（loader 内部键，必须全仓库唯一） |
+
+### 不要做
+
+- **不要发预发布版本而不带 dist-tag**：必须 `--tag=next`。别把 CI 快照往 npm 上堆——
+  packument 有 100 MB 上限，触顶后所有新版本都发不出去，且超过 72 小时的版本无法自行删除。
+- **不要在包里引用仓库根**（`../../shared/...`）：每个包必须能单独复制出去构建。
+- **不要动用户的 `web` profile**：验证挂载一律用 `pnpm verify:mount`（自己建临时 profile 并在 finally 里清理）。
+- **不要代跑 `npm publish`**：npm 的 2FA 握手要求 TTY 并要求本人按 Touch ID，必须由人在自己终端执行。
+- **不要手改 `build/tsdown.client.ts`**：改 `shared/tsdown.client.ts` 后跑 `pnpm preset:sync`。
+
 ## 硬约束
 
 1. **只基于官方 NPM SDK**：类型来自 `devDependencies` 里的 `@deepseek-ai/*`。
@@ -42,12 +95,13 @@
   `SIGTERM`，禁止抢占其端口另起替代实例。
 - 改动需要重启才生效时（bundle 行、`cordis.patch.yml`），**不要自行重启**；
   在交付报告里标注「需要用户重启 DSH 服务后生效」。
-- 验证插件挂载用**临时 profile**，不要动用户的 `web` profile：
+- 验证插件挂载用**临时 profile**，不要动用户的 `web` profile。
+  直接跑现成的脚本即可，它会自建 `dsh-mount-verify` profile 并在 `finally` 里清理：
   ```sh
-  dsh plugin --profile <scratch> add "link:$PWD/packages/<name>"
-  dsh --profile <scratch> --dump-config | grep -A3 "<name>"
-  dsh plugin --profile <scratch> remove <name> && rm -rf ~/.dsh/profiles/<scratch>
+  pnpm verify:mount              # 全部包
+  node scripts/verify-mount.mjs dsh-foo   # 单个包
   ```
+  需要手工排查时，务必用独立 profile 名并在结束前删掉 `~/.dsh/profiles/<scratch>`。
 
 ## 每个包的必备面
 
@@ -68,10 +122,26 @@ README.md               包级说明（files 里声明了它）
 
 ```sh
 pnpm install
-pnpm preset:sync   # 共享预设改动后刷新包内副本
-pnpm preset:check  # 校验副本漂移（已接进 pnpm test）
-pnpm new <name>    # 从 dsh-hello 生成新插件
-pnpm gate          # 发布前完整门禁：preset:check + build + typecheck + test
+
+# 门禁（交付前必须全绿）
+pnpm gate              # 8 道关全跑，约 5 秒
+pnpm contract          # 只跑发布契约静态检查
+pnpm contract:dist     # 只跑构建产物 + tarball 检查（需先 build）
+pnpm contract:selftest # 自测门禁本身是否仍能拦住 19 个失败模式
+pnpm verify:mount      # 真实挂载验证（自建临时 profile 并清理）
+
+# 工具
+pnpm preset:sync       # 共享预设改动后刷新包内副本
+pnpm preset:check      # 校验副本漂移（已接进 pnpm test 与 gate）
+pnpm new <name>        # 从模板生成新插件，自动套用 scope
+pnpm publish:check <name>  # npm 发布预检 + dry-run，不会发布
+```
+
+单独验证某个包时，这些脚本都接受包名参数：
+
+```sh
+node scripts/check-plugin.mjs --dist dsh-foo
+node scripts/verify-mount.mjs dsh-foo
 ```
 
 ## 与 dsh-web 仓库的关系

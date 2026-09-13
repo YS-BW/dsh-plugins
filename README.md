@@ -77,8 +77,43 @@ pnpm preset:check   # 校验副本漂移
 pnpm new dsh-foo    # 从 dsh-hello 生成新插件
 pnpm build          # 全仓构建
 pnpm typecheck
-pnpm test           # preset:check + 全仓测试
-pnpm gate           # 发布前的完整门禁：preset:check + build + typecheck + test
+pnpm test           # preset:check + 契约检查 + 全仓测试
+pnpm gate           # 交付前完整门禁（8 道关，约 5 秒）
+```
+
+### 门禁在防什么
+
+`pnpm gate` 是「能不能发布」和「发布后能不能用」的机器化契约。它跑 8 道关：
+
+| 阶段 | 抓什么 |
+| --- | --- |
+| `preset:check` | 包内预设副本与 `shared/` 漂移 |
+| `contract` | 发布契约：包名、scope、semver、`files`、`exports`、`dsh.*` 声明 |
+| `contract:selftest` | **门禁本身是否还有效**（19 个失败模式用例） |
+| `build` | 构建，含客户端 bundle 纯度门 |
+| `contract:dist` | 构建产物 + **真实 tarball 内容** |
+| `verify:mount` | 装进临时 profile，让 DSH loader 真的解析一遍 |
+| `typecheck` / `-r test` | 类型与单测 |
+
+最危险的一类问题是**装得上、不报错、就是没反应**，根源是四处标识不一致：
+
+| 位置 | 值 |
+| --- | --- |
+| `package.json` → `name` | 完整包名 `@lixklv/dsh-xxx` |
+| `cordis.patch.yml` → `name` | 完整包名（逐字符一致） |
+| `tsdown.config.ts` → `clientBundle(id)` | 完整包名（逐字符一致） |
+| `cordis.patch.yml` → `id` | 短名 `dsh-xxx`（全仓库唯一） |
+
+`clientBundle` 的 id 是客户端模块表的注册键：不一致的话构建照样成功、包照样能装，
+但浏览器半区**静默不注册**，界面毫无变化。`pnpm gate` 会拦住它。
+
+可以单独跑：
+
+```sh
+node scripts/check-plugin.mjs              # 静态契约
+node scripts/check-plugin.mjs --dist       # 加构建产物与 tarball 检查
+node scripts/test-checks.mjs               # 自测门禁
+node scripts/verify-mount.mjs dsh-foo      # 真实挂载验证
 ```
 
 单个包（在包目录里，等于脱离仓库也能用）：

@@ -16,7 +16,7 @@
  *
  * <包名> 可以是包目录名（dsh-hello）或相对/绝对路径。
  */
-import { spawnSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -27,15 +27,20 @@ const target = args.find((value) => !value.startsWith('--'))
 const doPublish = args.includes('--publish')
 
 /**
- * 转交给 npm publish 的额外参数（目前只用到 --otp）。
- * 带 --otp 时走快路径：2FA 验证码 30 秒就过期，跑不动门禁 + dry-run 那 40 秒。
- * 前提是刚刚已经用不带 --otp 的方式跑过一次完整预检。
+ * 转交给 npm publish 的额外参数。
+ * - `--otp=...` 走快路径：2FA 验证码 30 秒就过期，跑不动门禁 + dry-run 那 40 秒。
+ *   前提是刚刚已经用不带 --otp 的方式跑过一次完整预检。
+ * - `--tag=...` 只做转发，不影响流程。
  */
-const forwardedFlags = args.filter((value) => value.startsWith('--otp'))
-const fastPath = forwardedFlags.length > 0
+const otpFlags = args.filter((value) => value.startsWith('--otp'))
+const tagFlags = args.filter((value) => value.startsWith('--tag'))
+const forwardedFlags = [...otpFlags, ...tagFlags]
+const fastPath = otpFlags.length > 0
 
-if (args.includes('--otp')) {
-  fail('请用 --otp=<六位码> 形式传验证码，不要用空格分隔（否则验证码会被当成包名）。')
+for (const [flag, hint] of [['--otp', '六位码'], ['--tag', 'dist-tag']]) {
+  if (args.includes(flag)) {
+    fail(`请用 ${flag}=<${hint}> 形式传参，不要用空格分隔（否则值会被当成包名）。`)
+  }
 }
 
 /** npm/pnpm 的代理告警是环境噪音，不是错误。 */
@@ -75,6 +80,25 @@ function runInherit(command, commandArgs, options = {}) {
     stdio: 'inherit',
   })
   return { ok: result.status === 0, status: result.status }
+}
+
+/**
+ * registry 上该包的 packument 体积（字节）。packument 是「所有版本的元数据之和」，
+ * registry 对它有 100 MB 上限，触顶后任何新版本都发不出去，且 72 小时以上的版本
+ * 无法自行删除。拿不到时返回 null（不阻塞发布）。
+ */
+function packumentSize(name) {
+  try {
+    const out = execFileSync(
+      'curl',
+      ['-s', '-m', '25', '-o', '/dev/null', '-w', '%{size_download}', `https://registry.npmjs.org/${name}`],
+      { encoding: 'utf8' },
+    )
+    const bytes = Number.parseInt(out.trim(), 10)
+    return Number.isFinite(bytes) && bytes > 0 ? bytes : null
+  } catch {
+    return null
+  }
 }
 
 function fail(message) {
@@ -142,6 +166,33 @@ console.log(
     ? `[publish] npm 上现有最新版：${latest.stdout}（本次要发 ${version}）`
     : '[publish] npm 上还没有这个包，这是首次发布',
 )
+
+// ---- 3b. 预发布版本必须显式指定 dist-tag ----
+// 否则它会成为 latest，用户 dsh plugin add 装到的是半成品。
+if (version.includes('-') && tagFlags.length === 0) {
+  fail(
+    `version "${version}" 是预发布版，但没指定 dist-tag。\n`
+    + '        直接发布会让它成为 latest，用户装到的就是半成品。\n'
+    + `        请显式指定，例如： node scripts/publish.mjs ${target} --publish --tag=next`,
+  )
+}
+
+// ---- 3c. packument 体积（registry 上限 100 MB，超了所有版本都发不出去） ----
+const packumentBytes = packumentSize(name)
+if (packumentBytes !== null) {
+  const mib = packumentBytes / 1024 / 1024
+  console.log(`[publish] 现有 packument 体积：${mib < 1 ? `${(packumentBytes / 1024).toFixed(1)} KB` : `${mib.toFixed(2)} MB`} / 100 MB`)
+  if (mib > 90) {
+    fail(
+      `packument 已达 ${mib.toFixed(1)} MB，接近 registry 的 100 MB 上限。\n`
+      + '        触顶后所有新版本都会被拒绝，且超过 72 小时的版本无法自行删除。\n'
+      + '        需要联系 npm support 清理历史版本，请先处理再发布。',
+    )
+  }
+  if (mib > 50) {
+    console.warn(`[publish] 警告：packument 已 ${mib.toFixed(1)} MB，超过 100 MB 后将无法再发布任何版本`)
+  }
+}
 
 // ---- 4. 门禁 ----
 const isWorkspaceRoot = existsSync(join(REPO_ROOT, 'pnpm-workspace.yaml'))

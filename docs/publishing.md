@@ -330,6 +330,7 @@ type(scope): subject
       Security Key）。没绑的话发布必被 E403 拒绝，见「### 1b」
 - [ ] 包名已定（无 scope 或 scoped + `publishConfig.access: public`），四处标识一致
 - [ ] `author` / `repository` / `keywords` 已补
+- [ ] `pnpm gate` 全绿（含契约检查、门禁自测、构建产物与 tarball 检查、真实挂载验证）
 - [ ] `node scripts/publish.mjs <包名>` 预检通过
 - [ ] tarball 里有 `lib/`、`cordis.patch.yml`、`README.md`
 - [ ] 把该包目录**单独复制到仓库外**跑一遍 `pnpm install && pnpm build && pnpm test`，

@@ -11,12 +11,16 @@
   "scripts": {
     "preset:sync": "node scripts/sync-preset.mjs",
     "preset:check": "node scripts/sync-preset.mjs --check",
+    "contract": "node scripts/check-plugin.mjs",
+    "contract:dist": "node scripts/check-plugin.mjs --dist",
+    "contract:selftest": "node scripts/test-checks.mjs",
+    "verify:mount": "node scripts/verify-mount.mjs",
     "new": "node scripts/new-plugin.mjs",
     "publish:check": "node scripts/publish.mjs",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm preset:check && pnpm -r test",
-    "gate": "pnpm preset:check && pnpm build && pnpm typecheck && pnpm -r test"
+    "test": "pnpm preset:check && pnpm contract && pnpm -r test",
+    "gate": "pnpm preset:check && pnpm contract && pnpm contract:selftest && pnpm build && pnpm contract:dist && pnpm verify:mount && pnpm typecheck && pnpm -r test"
   },
   "dshPlugins": {
     "scope": "@lixklv",

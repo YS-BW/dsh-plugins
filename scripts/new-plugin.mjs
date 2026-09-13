@@ -9,6 +9,7 @@
  * npm scope 与模板包来自仓库根 package.json 的 dshPlugins 字段：
  *   "dshPlugins": { "scope": "@lixklv", "template": "dsh-hello" }
  */
+import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -100,11 +101,12 @@ walk(dest)
 console.log(`[new-plugin] 已生成 packages/${base}  (${fullName})`)
 console.log('')
 console.log('接下来：')
-console.log(`  1. 写 src/client/index.ts 的 UI 与 src/index.ts 的 host 行为`)
-console.log(`  2. 改 package.json 的 description（version 已是 0.0.1）`)
-console.log(`  3. pnpm install && pnpm gate`)
-console.log(`  4. 本地验证：cd packages/${base} && dsh plugin --profile web add link:"$PWD"`)
-console.log('  5. 重启 dsh web 后生效')
+console.log('  1. 写 src/client/index.ts 的 UI 与 src/index.ts 的 host 行为')
+console.log('  2. 改 package.json 的 description（version 已是 0.0.1）')
+console.log('  3. 补 tests/ 用例（至少一条 host 与一条 client）')
+console.log('  4. pnpm install && pnpm gate     # 契约 + 构建 + 真实挂载验证')
+console.log(`  5. 想让它在 GUI 里出现：cd packages/${base} && dsh plugin --profile web add link:"$PWD"`)
+console.log('     注意：这一步会改你的 web profile，且需要重启 dsh web 后才生效')
 console.log('')
 console.log('自检：下面这些位置必须都是新标识')
 
@@ -121,3 +123,19 @@ for (const [file, pattern] of checks) {
 }
 console.log('')
 console.log('  id 与 PLUGIN_ID 用短名是正常的；name 与 clientBundle id 必须是完整包名。')
+
+// 立刻用契约门禁验证新包，避免「生成出来就是违规的」
+console.log('')
+console.log('契约检查：')
+try {
+  const output = execFileSync(process.execPath, [join(REPO_ROOT, 'scripts', 'check-plugin.mjs'), dest], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  for (const line of output.trim().split('\n')) console.log(`  ${line}`)
+} catch (err) {
+  const output = `${err.stdout ?? ''}${err.stderr ?? ''}`.trim()
+  console.error(output.split('\n').map((line) => `  ${line}`).join('\n'))
+  console.error('[new-plugin] 新包未通过契约检查，请先修复再继续')
+  process.exit(1)
+}

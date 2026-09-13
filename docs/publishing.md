@@ -37,6 +37,64 @@ npm config get registry     # 必须是 https://registry.npmjs.org/
 >
 > 认证令牌由 `npm login` 写进**用户级** `~/.npmrc`，不要提交进仓库。
 
+### 1b. 2FA：npm 只认安全密钥（重要，实测）
+
+npm 现在对**所有包**强制要求 2FA 或「带 bypass 2FA 的 granular access token」，否则
+`npm publish` 会被 registry 直接以 E403 拒绝：
+
+```text
+403 Forbidden - PUT https://registry.npmjs.org/<pkg>
+Two-factor authentication or granular access token with bypass 2fa enabled is required to publish packages.
+```
+
+**必须知道的三个事实（都是实测/源码确认，别再走弯路）：**
+
+1. **网站已经彻底取消验证器 App（TOTP）。** 2FA 设置页的 METHOD 步只有一个选项
+   `security-key`，页面 DOM 里连 `authenticator` / `TOTP` 字样都不存在。
+   所以「用 Google/Microsoft Authenticator 扫二维码」这条路在 npm 上**已经不可能**，
+   不要在这上面浪费时间。
+2. **验证器 App 只存在于 CLI 的老接口** `npm profile enable-2fa auth-and-writes`
+   （它会返回 `otpauth://` URL 并打印二维码与 base32 密钥）。但这个命令在 2FA 非
+   pending 状态下会先要求 `Enter one-time password:`，而它的实现
+   （`lib/utils/read-user-info.js` 的 `readOTP`）**只是纯文本输入，不支持安全密钥**。
+   于是「只绑了安全密钥、没有 TOTP」时该命令会卡死。结论：**别指望它**。
+3. **安全密钥 = Touch ID / iCloud 钥匙串 / passkey。** 在 Chrome 弹框里选
+   「iCloud 钥匙串」或「您的 Chrome 个人资料」都能用 Touch ID；
+   选「使用手机或平板电脑」会给出一个 WebAuthn 跨设备二维码——
+   **那不是 TOTP 密钥，扫进任何验证器 App 都不会出码**（这是最容易搞错的一步）。
+
+**发布时的 2FA 流程（CLI 交互式）：**
+
+```text
+npm notice Publishing to https://registry.npmjs.org/ with tag latest and public access
+Authenticate your account at:
+https://www.npmjs.com/auth/cli/<uuid>
+Press ENTER to open in the browser...
+```
+
+回车后浏览器打开认证页，点 `Use security key` 并验证指纹即可，CLI 会自动轮询并继续发布。
+
+> 认证页上有个复选框：**Do not challenge npm publish from IP address \<你的 IP\>
+> for the next 5 minutes**。连续发多个版本时勾上，5 分钟内免再按指纹。
+
+**TTY 是硬要求。** npm 的 2FA 握手第一句就是
+`if (!process.stdin.isTTY || !process.stdout.isTTY) throw err`
+（`lib/utils/auth.js` 的 `otplease`）。所以：
+
+- **必须由人坐在终端前发布**，agent / CI / 管道里跑不通。
+- 本仓库的 `scripts/publish.mjs` 已经处理了这点：检测到 TTY 且未传 `--otp` 时用
+  `stdio: 'inherit'` 把终端交给 npm，让上面的浏览器认证流程能正常发生。
+
+**写脚本 / CI 的话**（例如将来做自动发布）：只能走带 bypass 2FA 的 granular token，
+并且要留意官方的时间线（npm 站点横幅原文）：
+
+| 用途 | bypass token 可用到 |
+| --- | --- |
+| 账号变更 | 2026 年 8 月起**已禁用** |
+| 直接发布 | 2027 年 1 月起禁用 |
+
+也就是说 bypass token 只是过渡方案，长期仍要落到安全密钥上。
+
 ### 2. 决定包名
 
 - 无 scope（如 `dsh-hello`）：安装命令最短，但 `dsh-*` 好名字基本被占了，先去 npm 搜一下。
@@ -110,6 +168,9 @@ node scripts/publish.mjs dsh-hello            # 只预检 + dry-run，不会发�
 node scripts/publish.mjs dsh-hello --publish
 ```
 
+脚本会复用前面的预检，然后**把终端交给 npm**（`stdio: 'inherit'`），浏览器打开认证页后
+按 Touch ID 即可。
+
 或者手动两步（等价）：
 
 ```sh
@@ -118,14 +179,24 @@ npm publish --dry-run     # 先看内容
 npm publish               # scoped 包加 --access public
 ```
 
-> 被 2FA 拦下时手动执行并带上一次性验证码：`npm publish --otp=<六位码>`。
+> **这一步必须由你在自己的终端里跑**（不要用 agent 代跑）：npm 的 2FA 握手要求 TTY，
+> 而且会打开浏览器让你按 Touch ID。说明见「### 1b. 2FA：npm 只认安全密钥」。
 
 ### 6. 验证
 
 ```sh
-npm view dsh-hello version            # 应打印刚发的版本
-npm view dsh-hello dist.tarball       # 确认 tarball 地址
-dsh plugin --profile web add dsh-hello    # 真实装一遍，重启 dsh web 后生效
+npm view @lixklv/dsh-hello version            # 应打印刚发的版本
+npm view @lixklv/dsh-hello dist.tarball       # 确认 tarball 地址
+```
+
+真实装一遍（**用临时 profile，不要动你自己的 `web` profile**）：
+
+```sh
+dsh plugin --profile dsh-hello-verify add @lixklv/dsh-hello
+dsh --profile dsh-hello-verify --dump-config | grep -A2 "@lixklv/dsh-hello"
+# 应看到： # == @lixklv/dsh-hello / - id: dsh-hello / name: '@lixklv/dsh-hello'
+dsh plugin --profile dsh-hello-verify remove @lixklv/dsh-hello
+rm -rf ~/.dsh/profiles/dsh-hello-verify
 ```
 
 ### 7. 之后的版本更新
@@ -255,14 +326,23 @@ type(scope): subject
 发 npm 前：
 
 - [ ] `npm whoami` 能打印用户名，`npm config get registry` 是官方源
+- [ ] **账号已绑定安全密钥**（`https://www.npmjs.com/settings/<用户名>/tfa/list` 里能看到
+      Security Key）。没绑的话发布必被 E403 拒绝，见「### 1b」
 - [ ] 包名已定（无 scope 或 scoped + `publishConfig.access: public`），四处标识一致
 - [ ] `author` / `repository` / `keywords` 已补
 - [ ] `node scripts/publish.mjs <包名>` 预检通过
 - [ ] tarball 里有 `lib/`、`cordis.patch.yml`、`README.md`
 - [ ] 把该包目录**单独复制到仓库外**跑一遍 `pnpm install && pnpm build && pnpm test`，
       确认不依赖仓库根（本仓库的每个包都应该是自足的）
-- [ ] 本地 `dsh plugin --profile web add link:"$PWD"` 装进真实 GUI，重启后功能可见
+- [ ] 本地用**临时 profile** 装一遍验证挂载：
+      `dsh plugin --profile dsh-hello-verify add link:"$PWD"`
 - [ ] `package.json` 的 `dsh.engines.dsh` 与实际运行的 DSH 版本相符
+
+`npm publish` 时（由本人终端操作）：
+
+- [ ] 在**自己的终端**里跑，不要用 agent / CI 代跑（2FA 握手要求 TTY）
+- [ ] 浏览器认证页出现后点 `Use security key` 并验证指纹
+- [ ] 连续发多版本时，勾上认证页的「5 分钟内免再挑战」复选框
 
 提索引 PR 前：
 

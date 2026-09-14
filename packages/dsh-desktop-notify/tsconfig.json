@@ -1,0 +1,22 @@
+{
+  // 自包含编译配置：类型全部来自 devDependencies 里的官方 @deepseek-ai/* NPM SDK，
+  // 不 extends / paths / references 任何 DSH 源码 checkout。
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    // host 半区用 node:child_process / node:fs 与 process，需要 node 类型。
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx"]
+}

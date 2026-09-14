@@ -1,0 +1,134 @@
+/*
+ * 「设置 → 桌面通知」这一页的样式。
+ *
+ * 只用 CSS 变量，不写死颜色，这样跟随官方主题的明暗切换。
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 4px 2px 24px;
+  max-width: 680px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--dsh-text-primary, inherit);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sectionTitle {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0.62;
+  margin: 0;
+}
+
+.card {
+  border: 1px solid var(--dsh-border-subtle, rgba(128, 128, 128, 0.24));
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.label {
+  min-width: 96px;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.value {
+  font-family: var(--dsh-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.good {
+  color: var(--dsh-text-success, #1a7f37);
+}
+
+.bad {
+  color: var(--dsh-text-danger, #cf222e);
+}
+
+.warn {
+  color: var(--dsh-text-warning, #9a6700);
+}
+
+.note {
+  opacity: 0.66;
+  font-size: 12px;
+  margin: 0;
+}
+
+.toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  cursor: pointer;
+  padding: 3px 0;
+}
+
+.toggle input {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.toggleText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.toggleHint {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.master {
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.button {
+  font: inherit;
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: 1px solid var(--dsh-border-subtle, rgba(128, 128, 128, 0.3));
+  background: var(--dsh-surface-raised, rgba(128, 128, 128, 0.08));
+  color: inherit;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--dsh-surface-hover, rgba(128, 128, 128, 0.16));
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.error {
+  color: var(--dsh-text-danger, #cf222e);
+  font-size: 12px;
+  margin: 0;
+}

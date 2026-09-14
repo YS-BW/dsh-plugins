@@ -1,0 +1,14 @@
+{
+  // 只出类型声明：host 半区是别的包编译时依赖的契约，但类型要保留
+  // `import type { Context } from '@deepseek-ai/cordis'` 这种外部引用，
+  // 不要把 cordis 的整个类型面内联进产物（tsdown 的 dts 会内联）。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}
